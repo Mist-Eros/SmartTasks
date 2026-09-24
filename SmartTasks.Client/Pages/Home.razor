@@ -1,0 +1,82 @@
+﻿@page "/"
+@inject HttpClient Http
+@using System.Net.Http.Json
+@using SmartTasks.Shared
+
+<PageTitle>Home</PageTitle>
+
+<button @onclick="PingServer">Ping Server</button>
+<p>@result</p>
+
+<h1>Hello, world!</h1>
+
+Welcome to your new app.
+
+<hr />
+
+<div>
+    <textarea @bind="inputText" rows="3" cols="50" placeholder="Describe your task..."></textarea>
+</div>
+
+<button @onclick="Parse">Parse</button>
+
+@if (parseError is not null)
+{
+    <p style="color: red;">@parseError</p>
+}
+
+@if (parsedTask is not null)
+{
+    <div class="card" style="border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-top: 1rem; max-width: 24rem;">
+        <h3>@parsedTask.Title</h3>
+        @if (!string.IsNullOrEmpty(parsedTask.Date))
+        {
+            <p>Date: @parsedTask.Date</p>
+        }
+        @if (!string.IsNullOrEmpty(parsedTask.Time))
+        {
+            <p>Time: @parsedTask.Time</p>
+        }
+        <p><strong>@parsedTask.Priority</strong></p>
+        @if (parsedTask.Tags is not null && parsedTask.Tags.Count > 0)
+        {
+            <p>@string.Join(", ", parsedTask.Tags)</p>
+        }
+    </div>
+}
+
+@code {
+    private string result = "";
+    private string inputText = "";
+    private TaskDto? parsedTask;
+    private string? parseError;
+
+    private async Task PingServer()
+    {
+        result = await Http.GetStringAsync("/api/ping");
+    }
+
+    private async Task Parse()
+    {
+        parseError = null;
+        parsedTask = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/parse", new ParseRequest { Text = inputText });
+
+            if (response.IsSuccessStatusCode)
+            {
+                parsedTask = await response.Content.ReadFromJsonAsync<TaskDto>();
+            }
+            else
+            {
+                parseError = $"Parse failed with status {(int)response.StatusCode}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            parseError = $"Error: {ex.Message}";
+        }
+    }
+}

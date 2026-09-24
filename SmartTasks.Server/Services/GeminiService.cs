@@ -18,7 +18,7 @@ public class GeminiService
           "title": "short string, the task itself",
           "date": "YYYY-MM-DD or null if no date implied",
           "time": "HH:mm (24-hour) or null if no time implied",
-          "priority": "low | medium | high",
+          "priority": "low | medium | high | urgent | critical",
           "tags": ["1-4 short lowercase tags, e.g. work, personal, meeting, errand"]
         }
 
@@ -28,8 +28,17 @@ public class GeminiService
         - "Next X" (where X is a weekday) means the closest future occurrence of X, strictly after today. If X is today's weekday, it means 7 days from now. Example: if today is Thursday, "next Thursday" means the Thursday 7 days later, not today.
         - "X next week" means the occurrence of X in the following calendar week (7 days later than "next X").
         - If no date is implied, use null. Do not invent dates.
-        - Priority defaults to "medium" unless words like "urgent", "asap", or "important" suggest high, or "whenever", "someday", or "low priority" suggest low.
+        - Priority is one of: low, medium, high, urgent, critical.
+          - low: no rush ("whenever", "someday", "no rush")
+          - medium: default when no strong signal
+          - high: important ("important", "need to", "should")
+          - urgent: time-critical ("ASAP", "urgent", "deadline soon")
+          - critical: must-not-miss ("life or death", "miss or die", "emergency", "cannot miss", "critical")
         - Tags should be generic categories, not the task title. 1-4 tags max, lowercase.
+        - The user message includes the current local date and time. Use BOTH when resolving relative expressions.
+        - Durations like "in 2 hours", "in 30 minutes", "in 3 days" are relative to the current time. Example: if current time is 12:20, "in 2 hours" means today at 14:20.
+        - "This afternoon" = today at 15:00. "Tonight" = today at 20:00. "This evening" = today at 19:00. "This morning" = today at 09:00.
+        - If a duration would cross into the next day (e.g. "in 5 hours" from 22:00 → 03:00 the next day), roll the date forward accordingly.
 
         Examples:
 
@@ -41,6 +50,13 @@ public class GeminiService
 
         Input: "URGENT: submit tax form by Friday"
         Output: {"title":"Submit tax form","date":"2026-09-25","time":null,"priority":"high","tags":["finance","deadline"]}
+
+        Input: "wawa in 2 hours"
+        (assuming current time is 2026-09-25 12:20)
+        Output: {"title":"Wawa","date":"2026-09-25","time":"14:20","priority":"medium","tags":["errand"]}
+
+        Input: "MISS OR DIE: submit the final exam by Friday 5pm"
+        Output: {"title":"Submit final exam","date":"2026-09-25","time":"17:00","priority":"critical","tags":["deadline","exam"]}
         """;
 
     private const string GeminiEndpoint =
@@ -69,11 +85,11 @@ public class GeminiService
 
         var body = new
         {
-            model = "gemini-3.6-flash",
+            model = "gemini-3.5-flash-lite",
             messages = new object[]
             {
                 new { role = "system", content = SYSTEM_PROMPT },
-                new { role = "user", content = $"Today is {DateTime.UtcNow:yyyy-MM-dd}. Parse this: {userText}" }
+                new { role = "user", content = $"Current local date and time: {DateTime.Now:yyyy-MM-dd HH:mm}. Parse this: {userText}" }
             }
         };
 

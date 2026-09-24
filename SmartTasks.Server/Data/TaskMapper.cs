@@ -14,8 +14,19 @@ public static class TaskMapper
             Priority = dto.Priority,
             TagsCsv = string.Join(",", dto.Tags ?? new List<string>()),
             UserId = "default-user",
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
+    }
+
+    public static void ApplyUpdate(TaskEntity existing, TaskDto dto)
+    {
+        existing.Title = dto.Title;
+        existing.Date = dto.Date;
+        existing.Time = dto.Time;
+        existing.Priority = dto.Priority;
+        existing.TagsCsv = string.Join(",", dto.Tags ?? new List<string>());
+        existing.UpdatedAt = DateTime.UtcNow;
     }
 
     public static TaskDto ToDto(TaskEntity entity)

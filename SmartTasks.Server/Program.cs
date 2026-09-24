@@ -56,6 +56,38 @@ app.MapGet("/api/tasks", async (AppDbContext db) =>
     return Results.Ok(tasks.Select(TaskMapper.ToDto));
 });
 
+app.MapPut("/api/tasks/{id:int}", async (int id, TaskDto dto, AppDbContext db) =>
+{
+    var existing = await db.Tasks
+        .FirstOrDefaultAsync(t => t.Id == id && t.UserId == "default-user");
+
+    if (existing is null)
+    {
+        return Results.NotFound();
+    }
+
+    TaskMapper.ApplyUpdate(existing, dto);
+    await db.SaveChangesAsync();
+
+    return Results.Ok(TaskMapper.ToDto(existing));
+});
+
+app.MapDelete("/api/tasks/{id:int}", async (int id, AppDbContext db) =>
+{
+    var existing = await db.Tasks
+        .FirstOrDefaultAsync(t => t.Id == id && t.UserId == "default-user");
+
+    if (existing is null)
+    {
+        return Results.NotFound();
+    }
+
+    db.Tasks.Remove(existing);
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+});
+
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 

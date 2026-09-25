@@ -4,16 +4,16 @@ namespace SmartTasks.Server.Data;
 
 public static class TaskMapper
 {
-    public static TaskEntity ToEntity(TaskDto dto)
+    public static TaskEntity ToEntity(TaskDto dto, int userId)
     {
         return new TaskEntity
         {
+            UserId = userId,
             Title = dto.Title,
             Date = dto.Date,
             Time = dto.Time,
             Priority = dto.Priority,
             TagsCsv = string.Join(",", dto.Tags ?? new List<string>()),
-            UserId = "default-user",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };

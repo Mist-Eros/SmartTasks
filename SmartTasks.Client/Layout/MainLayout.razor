@@ -1,16 +1,51 @@
 ﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@using System.Text.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+<header class="app-header">
+    <div class="container app-header-inner">
+        <div class="app-brand">
+            <i class="bi bi-pencil-fill"></i>
+            <span>SmartTasks</span>
         </div>
+        <div class="header-right">
+            @if (!string.IsNullOrEmpty(currentUsername))
+            {
+                <button class="welcome-button" @onclick="Logout">
+                    Welcome, @currentUsername
+                </button>
+            }
+        </div>
+    </div>
+</header>
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+<main>
+    <div class="container py-5">
+        @Body
+    </div>
+</main>
+
+@code {
+    private string currentUsername = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var resp = await Http.GetAsync("/api/auth/me");
+            if (resp.IsSuccessStatusCode)
+            {
+                var me = await resp.Content.ReadFromJsonAsync<JsonElement>();
+                currentUsername = me.GetProperty("username").GetString() ?? "";
+            }
+        }
+        catch { }
+    }
+
+    private async Task Logout()
+    {
+        await Http.PostAsync("/api/auth/logout", null);
+        Nav.NavigateTo("/", forceLoad: true);
+    }
+}

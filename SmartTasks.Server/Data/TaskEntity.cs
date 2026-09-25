@@ -3,7 +3,7 @@ namespace SmartTasks.Server.Data;
 public class TaskEntity
 {
     public int Id { get; set; }
-    public string UserId { get; set; } = "default-user";
+    public int UserId { get; set; }
     public string Title { get; set; } = "";
     public string? Date { get; set; }
     public string? Time { get; set; }

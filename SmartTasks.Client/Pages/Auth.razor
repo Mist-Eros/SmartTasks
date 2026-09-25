@@ -1,0 +1,103 @@
+@page "/"
+@inject HttpClient Http
+@inject NavigationManager Nav
+@using System.Net.Http.Json
+
+<PageTitle>SmartTasks — Sign In</PageTitle>
+
+<div class="auth-container">
+    <h1 class="auth-title">@(isRegisterMode ? "Create Account" : "Welcome Back")</h1>
+    <p class="auth-subtitle">
+        @(isRegisterMode ? "Pick a username and password." : "Sign in to your tasks.")
+    </p>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="auth-error">@errorMessage</p>
+    }
+
+    <div class="auth-field">
+        <label>Username</label>
+        <input type="text" @bind="username" />
+    </div>
+    <div class="auth-field">
+        <label>Password</label>
+        <input type="password" @bind="password" />
+    </div>
+
+    <button class="btn btn-primary auth-submit"
+            @onclick="Submit"
+            disabled="@(isSubmitting || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))">
+        @if (isSubmitting)
+        {
+            <span class="spinner-border spinner-border-sm me-2"></span>
+        }
+        @(isRegisterMode ? "Create Account" : "Log In")
+    </button>
+
+    <p class="auth-toggle">
+        @if (isRegisterMode)
+        {
+            <span>Already have an account? </span>
+            <a href="#" @onclick:preventDefault @onclick="() => { isRegisterMode = false; errorMessage = null; }">Log in</a>
+        }
+        else
+        {
+            <span>Need an account? </span>
+            <a href="#" @onclick:preventDefault @onclick="() => { isRegisterMode = true; errorMessage = null; }">Create one</a>
+        }
+    </p>
+</div>
+
+@code {
+    private bool isRegisterMode = false;
+    private string username = "";
+    private string password = "";
+    private string? errorMessage;
+    private bool isSubmitting = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var resp = await Http.GetAsync("/api/auth/me");
+            if (resp.IsSuccessStatusCode)
+            {
+                Nav.NavigateTo("/home", forceLoad: true);
+            }
+        }
+        catch { /* ignore — not logged in */ }
+    }
+
+    private async Task Submit()
+    {
+        errorMessage = null;
+        isSubmitting = true;
+        try
+        {
+            var endpoint = isRegisterMode ? "/api/auth/register" : "/api/auth/login";
+            var response = await Http.PostAsJsonAsync(endpoint, new { username, password });
+
+            if (!response.IsSuccessStatusCode)
+            {
+                errorMessage = response.StatusCode switch
+                {
+                    System.Net.HttpStatusCode.Unauthorized => "Invalid username or password.",
+                    System.Net.HttpStatusCode.Conflict => "That username is already taken.",
+                    _ => $"Something went wrong ({response.StatusCode})."
+                };
+                return;
+            }
+
+            Nav.NavigateTo("/home", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+}

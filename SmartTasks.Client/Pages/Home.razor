@@ -1,63 +1,246 @@
-﻿@page "/"
+﻿@page "/home"
 @inject HttpClient Http
 @using System.Net.Http.Json
+@using System.Text.Json
 @using SmartTasks.Shared
 
-<PageTitle>Home</PageTitle>
-
-<button @onclick="PingServer">Ping Server</button>
-<p>@result</p>
-
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
-
-<hr />
+<PageTitle>SmartTasks</PageTitle>
 
 <div>
-    <textarea @bind="inputText" rows="3" cols="50" placeholder="Describe your task..."></textarea>
-</div>
+    <div class="mb-3">
+        <label class="form-label" for="task-input">What do you need to do?</label>
+        <textarea id="task-input" class="form-control task-input" @bind="inputText" placeholder='Try: "meeting with Sara next Tuesday at 2pm"'></textarea>
+    </div>
 
-<button @onclick="Parse">Parse</button>
+    <div class="d-flex justify-content-end mb-4">
+        <button class="btn btn-primary"
+                @onclick="Parse"
+                disabled="@(isParsing || string.IsNullOrWhiteSpace(inputText))">
+            @if (isParsing)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                <span>Thinking...</span>
+            }
+            else
+            {
+                <span>Add Task</span>
+            }
+        </button>
+    </div>
 
-@if (parseError is not null)
-{
-    <p style="color: red;">@parseError</p>
-}
+    @if (parseError is not null)
+    {
+        <p class="text-danger">@parseError</p>
+    }
 
-@if (parsedTask is not null)
-{
-    <div class="card" style="border: 1px solid #ccc; border-radius: 6px; padding: 1rem; margin-top: 1rem; max-width: 24rem;">
-        <h3>@parsedTask.Title</h3>
-        @if (!string.IsNullOrEmpty(parsedTask.Date))
+    @if (parsedTask is not null)
+    {
+        <div class="task-card parsed">
+            <h3 class="mb-2">@parsedTask.Title</h3>
+            <div class="meta-row">
+                @if (!string.IsNullOrEmpty(parsedTask.Date))
+                {
+                    <span><i class="bi bi-calendar"></i>@parsedTask.Date</span>
+                }
+                @if (!string.IsNullOrEmpty(parsedTask.Time))
+                {
+                    <span><i class="bi bi-clock"></i>@parsedTask.Time</span>
+                }
+                @{
+                    var (count, filled, critical) = StarsFor(parsedTask.Priority);
+                }
+                <span class="priority-stars @(critical ? "critical" : "")">
+                    @for (int i = 0; i < count; i++)
+                    {
+                        <i class="bi @(i < filled ? "bi-star-fill" : "bi-star")"></i>
+                    }
+                </span>
+                @foreach (var tag in parsedTask.Tags ?? new List<string>())
+                {
+                    <span class="tag-pill">@tag</span>
+                }
+            </div>
+            <button class="btn btn-primary mt-3" @onclick="SaveTask">Save</button>
+        </div>
+    }
+
+    <div class="sort-triangle">
+        <button class="sort-btn sort-btn-clock @(activeSort == SortMode.Date ? "active" : "")"
+                @onclick="() => { ToggleSort(SortMode.Date); tagDropdownOpen = false; }"
+                title="Sort by date">
+            <i class="bi bi-clock"></i>
+            @if (activeSort == SortMode.Date)
+            {
+                <span class="sort-arrow">@(sortAscending ? "↑" : "↓")</span>
+            }
+        </button>
+        <button class="sort-btn sort-btn-fire @(activeSort == SortMode.Priority ? "active" : "")"
+                @onclick="() => { ToggleSort(SortMode.Priority); tagDropdownOpen = false; }"
+                title="Sort by priority">
+            <i class="bi bi-fire"></i>
+            @if (activeSort == SortMode.Priority)
+            {
+                <span class="sort-arrow">@(sortAscending ? "↑" : "↓")</span>
+            }
+        </button>
+        <button class="sort-btn sort-btn-tag @(activeSort == SortMode.Tag ? "active" : "")"
+                @onclick="() => { activeSort = SortMode.Tag; sortAscending = true; tagDropdownOpen = true; }"
+                title="Filter by tag">
+            <i class="bi bi-tag"></i>
+        </button>
+        <button class="sort-btn sort-btn-center"
+                @onclick="CycleSort"
+                title="Cycle sort mode">
+            <i class="bi bi-arrow-repeat"></i>
+        </button>
+        <div class="sort-knob @($"knob-{activeSort.ToString().ToLower()}")"></div>
+        @if (tagDropdownOpen)
         {
-            <p>Date: @parsedTask.Date</p>
-        }
-        @if (!string.IsNullOrEmpty(parsedTask.Time))
-        {
-            <p>Time: @parsedTask.Time</p>
-        }
-        <p><strong>@parsedTask.Priority</strong></p>
-        @if (parsedTask.Tags is not null && parsedTask.Tags.Count > 0)
-        {
-            <p>@string.Join(", ", parsedTask.Tags)</p>
+            <div class="tag-dropdown">
+                <button class="tag-option @(selectedTag == null ? "selected" : "")"
+                        @onclick="() => { selectedTag = null; tagDropdownOpen = false; }">
+                    None
+                </button>
+                @foreach (var tag in AllTags())
+                {
+                    <button class="tag-option @(selectedTag == tag ? "selected" : "")"
+                            @onclick="() => { selectedTag = tag; tagDropdownOpen = false; }">
+                        @tag
+                    </button>
+                }
+            </div>
         }
     </div>
-}
+
+    @if (savedTasks.Count == 0)
+    {
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <p>No tasks yet — try adding one above.</p>
+        </div>
+    }
+    else
+    {
+        <h2 class="mb-3">Your tasks</h2>
+        @foreach (var task in SortedTasks())
+        {
+            <div class="task-card">
+                @if (editingTaskId == task.Id && editingTask is not null)
+                {
+                    <input type="text" class="form-control mb-2" @bind="editingTask.Title" />
+                    <input type="date" class="form-control mb-2" value="@editingTask.Date" @onchange="@(e => editingTask.Date = e.Value?.ToString())" />
+                    <input type="text" class="form-control mb-2" @bind="editingTask.Time" placeholder="e.g. 1430, 14:30, or 2pm" />
+                    <select class="form-select mb-2" @bind="editingTask.Priority">
+                        <option value="low">low</option>
+                        <option value="medium">medium</option>
+                        <option value="high">high</option>
+                        <option value="urgent">urgent</option>
+                        <option value="critical">critical</option>
+                    </select>
+                    <input type="text" class="form-control mb-2" @bind="tagsInput" placeholder="tags, comma-separated" />
+                    <button class="btn btn-sm btn-primary" @onclick="SaveEdit">Save</button>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+                }
+                else
+                {
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <strong>@task.Title</strong>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => StartEdit(task)">Edit</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteTask(task.Id)">
+                                @(confirmingDeleteId == task.Id ? "Confirm?" : "Delete")
+                            </button>
+                        </div>
+                    </div>
+                    <div class="meta-row">
+                        @if (!string.IsNullOrEmpty(task.Date))
+                        {
+                            <span><i class="bi bi-calendar"></i>@task.Date</span>
+                        }
+                        @if (!string.IsNullOrEmpty(task.Time))
+                        {
+                            <span><i class="bi bi-clock"></i>@task.Time</span>
+                        }
+                        @{
+                            var (count, filled, critical) = StarsFor(task.Priority);
+                        }
+                        <span class="priority-stars @(critical ? "critical" : "")">
+                            @for (int i = 0; i < count; i++)
+                            {
+                                <i class="bi @(i < filled ? "bi-star-fill" : "bi-star")"></i>
+                            }
+                        </span>
+                        @foreach (var tag in task.Tags ?? new List<string>())
+                        {
+                            <span class="tag-pill">@tag</span>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
 
 @code {
-    private string result = "";
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
     private string inputText = "";
     private TaskDto? parsedTask;
     private string? parseError;
+    private List<TaskDto> savedTasks = new();
+    private bool isParsing = false;
 
-    private async Task PingServer()
+    private int? editingTaskId;
+    private TaskDto? editingTask;
+    private string tagsInput = "";
+    private int? confirmingDeleteId;
+
+    private enum SortMode { None, Date, Priority, Tag }
+    private SortMode activeSort = SortMode.None;
+    private bool sortAscending = true;
+    private string? selectedTag = null;
+    private bool tagDropdownOpen = false;
+    private string currentUsername = "";
+
+    protected override async Task OnInitializedAsync()
     {
-        result = await Http.GetStringAsync("/api/ping");
+        // Check auth
+        try
+        {
+            var meResp = await Http.GetAsync("/api/auth/me");
+            if (!meResp.IsSuccessStatusCode)
+            {
+                Nav.NavigateTo("/");
+                return;
+            }
+            var me = await meResp.Content.ReadFromJsonAsync<JsonElement>();
+            currentUsername = me.GetProperty("username").GetString() ?? "";
+        }
+        catch
+        {
+            Nav.NavigateTo("/");
+            return;
+        }
+
+        // Existing task loading logic
+        await LoadTasks();
+    }
+
+    private async Task LoadTasks()
+    {
+        try
+        {
+            savedTasks = await Http.GetFromJsonAsync<List<TaskDto>>("/api/tasks") ?? new();
+        }
+        catch
+        {
+            parseError = "Failed to load saved tasks.";
+        }
     }
 
     private async Task Parse()
     {
+        isParsing = true;
         parseError = null;
         parsedTask = null;
 
@@ -72,6 +255,273 @@ Welcome to your new app.
             else
             {
                 parseError = $"Parse failed with status {(int)response.StatusCode}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            parseError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isParsing = false;
+        }
+    }
+
+    private static string? ParseTime(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return null;
+        input = input.Trim().ToLowerInvariant();
+
+        bool isPm = input.EndsWith("pm");
+        bool isAm = input.EndsWith("am");
+        if (isPm || isAm) input = input[..^2].Trim();
+        if (input.Length == 0) return null;
+
+        int hour, minute = 0;
+
+        if (input.Contains(':'))
+        {
+            var parts = input.Split(':');
+            if (parts.Length != 2) return null;
+            if (!int.TryParse(parts[0], out hour)) return null;
+            if (!int.TryParse(parts[1], out minute)) return null;
+        }
+        else
+        {
+            // No colon: interpret based on digit count
+            if (!input.All(char.IsDigit)) return null;
+            switch (input.Length)
+            {
+                case 1:
+                case 2:
+                    if (!int.TryParse(input, out hour)) return null;
+                    minute = 0;
+                    break;
+                case 3:
+                    if (!int.TryParse(input.Substring(0, 1), out hour)) return null;
+                    if (!int.TryParse(input.Substring(1, 2), out minute)) return null;
+                    break;
+                case 4:
+                    if (!int.TryParse(input.Substring(0, 2), out hour)) return null;
+                    if (!int.TryParse(input.Substring(2, 2), out minute)) return null;
+                    break;
+                default:
+                    return null;
+            }
+        }
+
+        if (isPm && hour < 12) hour += 12;
+        if (isAm && hour == 12) hour = 0;
+
+        if (hour < 0 || hour > 23) return null;
+        if (minute < 0 || minute > 59) return null;
+
+        return $"{hour:D2}:{minute:D2}";
+    }
+
+    private static string? NormalizeDate(string? date)
+    {
+        if (string.IsNullOrWhiteSpace(date)) return null;
+        return date;
+    }
+
+    private static (int count, int filled, bool critical) StarsFor(string priority) => priority?.ToLowerInvariant() switch
+    {
+        "low" => (3, 0, false),
+        "medium" => (3, 1, false),
+        "high" => (3, 2, false),
+        "urgent" => (3, 3, false),
+        "critical" => (4, 4, true),
+        _ => (3, 1, false)
+    };
+
+    private void ToggleSort(SortMode mode)
+    {
+        if (activeSort == mode)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            activeSort = mode;
+            sortAscending = true;
+        }
+    }
+
+    private void CycleSort()
+    {
+        activeSort = activeSort switch
+        {
+            SortMode.None => SortMode.Date,
+            SortMode.Date => SortMode.Priority,
+            SortMode.Priority => SortMode.Tag,
+            SortMode.Tag => SortMode.Date,
+            _ => SortMode.Date
+        };
+        sortAscending = true;
+        tagDropdownOpen = false;
+        if (activeSort != SortMode.Tag)
+        {
+            selectedTag = null;
+        }
+    }
+
+    private List<string> AllTags()
+    {
+        return savedTasks
+            .SelectMany(t => t.Tags ?? new List<string>())
+            .Distinct()
+            .OrderBy(t => t)
+            .ToList();
+    }
+
+    private List<TaskDto> SortedTasks()
+    {
+        var list = savedTasks.ToList();
+        if (activeSort == SortMode.Date)
+        {
+            list = sortAscending
+                ? list.OrderBy(t => string.IsNullOrEmpty(t.Date)).ThenBy(t => t.Date ?? "").ThenBy(t => t.Time ?? "").ToList()
+                : list.OrderBy(t => string.IsNullOrEmpty(t.Date)).ThenByDescending(t => t.Date ?? "").ThenByDescending(t => t.Time ?? "").ToList();
+        }
+        else if (activeSort == SortMode.Priority)
+        {
+            var rank = new Dictionary<string, int> { ["critical"] = 5, ["urgent"] = 4, ["high"] = 3, ["medium"] = 2, ["low"] = 1 };
+            list = sortAscending
+                ? list.OrderByDescending(t => rank.GetValueOrDefault(t.Priority, 0)).ToList()
+                : list.OrderBy(t => rank.GetValueOrDefault(t.Priority, 0)).ToList();
+        }
+        else if (activeSort == SortMode.Tag)
+        {
+            if (string.IsNullOrEmpty(selectedTag))
+            {
+                list = savedTasks.ToList();
+            }
+            else
+            {
+                list = list
+                    .OrderByDescending(t => t.Tags != null && t.Tags.Contains(selectedTag) ? 1 : 0)
+                    .ThenBy(t => t.Id)
+                    .ToList();
+            }
+        }
+        return list;
+    }
+
+    private async Task SaveTask()
+    {
+        if (parsedTask is null)
+        {
+            return;
+        }
+
+        parsedTask!.Time = ParseTime(parsedTask.Time);
+        parsedTask.Date = NormalizeDate(parsedTask.Date);
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("/api/tasks", parsedTask);
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadTasks();
+                parsedTask = null;
+                inputText = "";
+            }
+            else
+            {
+                parseError = $"Save failed with status {(int)response.StatusCode}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            parseError = $"Error: {ex.Message}";
+        }
+    }
+
+    private void StartEdit(TaskDto task)
+    {
+        confirmingDeleteId = null;
+        editingTask = new TaskDto
+        {
+            Id = task.Id,
+            Title = task.Title,
+            Date = task.Date,
+            Time = task.Time,
+            Priority = task.Priority,
+            Tags = task.Tags is null ? new List<string>() : new List<string>(task.Tags)
+        };
+        tagsInput = editingTask.Tags is null ? "" : string.Join(",", editingTask.Tags);
+        editingTaskId = task.Id;
+    }
+
+    private void CancelEdit()
+    {
+        editingTaskId = null;
+        editingTask = null;
+        tagsInput = "";
+        confirmingDeleteId = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editingTask is null || editingTaskId is null)
+        {
+            return;
+        }
+
+        editingTask.Date = NormalizeDate(editingTask.Date);
+        editingTask!.Time = ParseTime(editingTask.Time);
+
+        editingTask.Tags = tagsInput
+            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+            .Select(t => t.Trim())
+            .Where(t => t.Length > 0)
+            .ToList();
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"/api/tasks/{editingTask.Id}", editingTask);
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadTasks();
+                CancelEdit();
+            }
+            else
+            {
+                parseError = $"Save edit failed with status {(int)response.StatusCode}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            parseError = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task DeleteTask(int id)
+    {
+        if (confirmingDeleteId != id)
+        {
+            confirmingDeleteId = id;
+            editingTaskId = null;
+            editingTask = null;
+            tagsInput = "";
+            return;
+        }
+
+        try
+        {
+            var response = await Http.DeleteAsync($"/api/tasks/{id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                confirmingDeleteId = null;
+                await LoadTasks();
+            }
+            else
+            {
+                parseError = $"Delete failed with status {(int)response.StatusCode}.";
             }
         }
         catch (Exception ex)

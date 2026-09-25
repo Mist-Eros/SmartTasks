@@ -73,12 +73,6 @@ a:hover {
     transition: all 0.15s ease;
 }
 
-.btn-primary.disabled {
-    background-color: var(--red) !important;
-    border-color: var(--red) !important;
-    color: var(--cream) !important;
-    opacity: 0.4;
-}
 .btn-primary:hover {
     background: var(--red-hover);
     transform: translateY(-1px);
@@ -191,7 +185,6 @@ a:focus-visible {
 .btn-primary:active,
 .btn-primary:active:focus,
 .btn-primary.active,
-.btn-primary.show,
 .btn-primary:first-child:active {
     background-color: var(--red-hover) !important;
     border-color: var(--red-hover) !important;
@@ -206,14 +199,6 @@ a:focus-visible {
     background-color: var(--surface-hover) !important;
     border-color: var(--cream) !important;
     color: var(--cream) !important;
-}
-
-.text-muted {
-    color: var(--cream-muted) !important;
-}
-
-.text-secondary {
-    color: var(--cream-muted) !important;
 }
 
 .app-header {
@@ -271,35 +256,6 @@ a:focus-visible {
     opacity: 0.8;
 }
 
-.priority-pill {
-    display: inline-block;
-    padding: 0.15rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-transform: lowercase;
-    letter-spacing: 0.02em;
-}
-
-.priority-pill.high {
-    background: rgba(252, 59, 73, 0.15);
-    color: var(--red);
-    border: 1px solid rgba(252, 59, 73, 0.35);
-}
-
-.priority-pill.medium {
-    background: rgba(235, 227, 198, 0.08);
-    color: var(--cream);
-    border: 1px solid var(--border);
-}
-
-.priority-pill.low {
-    background: transparent;
-    color: var(--cream-muted);
-    border: 1px solid var(--border);
-    opacity: 0.8;
-}
-
 .priority-stars {
     display: inline-flex;
     gap: 0.15rem;
@@ -347,12 +303,6 @@ a:focus-visible {
 
 .loading-progress {
     background-color: var(--bg) !important;
-}
-
-.loading-progress .rotating,
-.rotating {
-    border-color: rgba(235, 227, 198, 0.15) !important;
-    border-top-color: var(--red) !important;
 }
 
 .loading-progress-text {

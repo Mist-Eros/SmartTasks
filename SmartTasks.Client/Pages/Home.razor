@@ -220,7 +220,6 @@
     private bool sortAscending = true;
     private string? selectedTag = null;
     private bool tagDropdownOpen = false;
-    private string currentUsername = "";
 
     private bool isRecording = false;
     private bool isTranscribing = false;
@@ -237,8 +236,6 @@
                 Nav.NavigateTo("/");
                 return;
             }
-            var me = await meResp.Content.ReadFromJsonAsync<JsonElement>();
-            currentUsername = me.GetProperty("username").GetString() ?? "";
         }
         catch
         {

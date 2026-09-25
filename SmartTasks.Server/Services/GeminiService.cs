@@ -129,6 +129,48 @@ public class GeminiService
         }
     }
 
+    public async Task<string> TranscribeAudioAsync(byte[] audioBytes, string mimeType, CancellationToken ct = default)
+    {
+        var apiKey = _config["Gemini:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey))
+            throw new InvalidOperationException("Gemini:ApiKey not configured");
+
+        var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+
+        var base64 = Convert.ToBase64String(audioBytes);
+        var body = new
+        {
+            model = "gemini-3.6-flash",
+            messages = new object[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "text", text = "Transcribe this audio. Return ONLY the transcribed text, nothing else. Do not add punctuation beyond what is spoken, do not summarize." },
+                        new { type = "input_audio", input_audio = new { data = base64, format = "wav" } }
+                    }
+                }
+            }
+        };
+
+        var response = await client.PostAsJsonAsync(
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            body, ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var err = await response.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException($"Gemini transcription failed: {response.StatusCode} - {err}");
+        }
+
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        return json.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+    }
+
     private static string StripFences(string content)
     {
         var trimmed = content.Trim();

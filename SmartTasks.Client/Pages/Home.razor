@@ -1,5 +1,6 @@
 ﻿@page "/home"
 @inject HttpClient Http
+@inject IJSRuntime JS
 @using System.Net.Http.Json
 @using System.Text.Json
 @using SmartTasks.Shared
@@ -9,7 +10,26 @@
 <div>
     <div class="mb-3">
         <label class="form-label" for="task-input">What do you need to do?</label>
-        <textarea id="task-input" class="form-control task-input" @bind="inputText" placeholder='Try: "meeting with Sara next Tuesday at 2pm"'></textarea>
+        <div class="textarea-wrap">
+            <textarea id="task-input" class="form-control task-input" @bind="inputText" placeholder='Try: "meeting with Sara next Tuesday at 2pm"'></textarea>
+            <button class="mic-button @(isRecording ? "recording" : "")"
+                    @onclick="ToggleRecording"
+                    disabled="@isTranscribing"
+                    title="@(isRecording ? "Stop recording" : "Start voice input")">
+                @if (isTranscribing)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                }
+                else
+                {
+                    <i class="bi @(isRecording ? "bi-stop-fill" : "bi-mic-fill")"></i>
+                }
+            </button>
+        </div>
+        @if (!string.IsNullOrEmpty(voiceError))
+        {
+            <p class="auth-error">@voiceError</p>
+        }
     </div>
 
     <div class="d-flex justify-content-end mb-4">
@@ -202,6 +222,10 @@
     private bool tagDropdownOpen = false;
     private string currentUsername = "";
 
+    private bool isRecording = false;
+    private bool isTranscribing = false;
+    private string? voiceError;
+
     protected override async Task OnInitializedAsync()
     {
         // Check auth
@@ -264,6 +288,53 @@
         finally
         {
             isParsing = false;
+        }
+    }
+
+    private async Task ToggleRecording()
+    {
+        voiceError = null;
+        if (!isRecording)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("audioRecorder.start");
+                isRecording = true;
+            }
+            catch
+            {
+                voiceError = "Microphone access denied or unavailable.";
+            }
+        }
+        else
+        {
+            isRecording = false;
+            isTranscribing = true;
+            try
+            {
+                var bytes = await JS.InvokeAsync<int[]>("audioRecorder.stop");
+                var byteArray = bytes.Select(b => (byte)b).ToArray();
+                using var content = new MultipartFormDataContent();
+                content.Add(new ByteArrayContent(byteArray), "audio", "recording.wav");
+                var resp = await Http.PostAsync("/api/transcribe", content);
+                if (resp.IsSuccessStatusCode)
+                {
+                    var result = await resp.Content.ReadFromJsonAsync<JsonElement>();
+                    inputText = result.GetProperty("text").GetString() ?? "";
+                }
+                else
+                {
+                    voiceError = "Transcription failed.";
+                }
+            }
+            catch (Exception ex)
+            {
+                voiceError = $"Error: {ex.Message}";
+            }
+            finally
+            {
+                isTranscribing = false;
+            }
         }
     }
 

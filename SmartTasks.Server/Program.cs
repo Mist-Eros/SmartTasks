@@ -125,6 +125,29 @@ app.MapDelete("/api/tasks/{id:int}", async (int id, AppDbContext db, HttpContext
     return Results.NoContent();
 }).RequireAuthorization();
 
+app.MapPost("/api/transcribe", async (HttpRequest request, GeminiService gemini) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest("Expected multipart form data");
+
+    var form = await request.ReadFormAsync();
+    var file = form.Files["audio"];
+    if (file == null || file.Length == 0)
+        return Results.BadRequest("No audio file provided");
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    try
+    {
+        var text = await gemini.TranscribeAudioAsync(ms.ToArray(), file.ContentType ?? "audio/webm");
+        return Results.Ok(new { text });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.Problem(ex.Message);
+    }
+}).RequireAuthorization();
+
 app.MapAuthEndpoints();
 
 app.UseBlazorFrameworkFiles();
